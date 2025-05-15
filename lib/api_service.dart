@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:unique_identifier/unique_identifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,13 +14,23 @@ class ApiService {
   ];
 
   static const Duration requestTimeout = Duration(seconds: 2);
-  static const int maxRetries = 3;
+  static const int maxRetries = 6;
   static const Duration initialRetryDelay = Duration(seconds: 1);
 
   // Cache for the last working server index
   int? _lastWorkingServerIndex;
-
+  late http.Client httpClient;
   final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
+
+  ApiService() {
+    httpClient = _createHttpClient();
+  }
+
+  http.Client _createHttpClient() {
+    final HttpClient client = HttpClient()
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+    return IOClient(client);
+  }
 
   void _showToast(String message) {
     Fluttertoast.showToast(
@@ -61,6 +73,8 @@ class ApiService {
     if (deviceId == null) {
       throw Exception("Unable to get device ID");
     }
+
+    // First get the ID number associated with this device
     final deviceResponse = await checkDeviceId(deviceId);
     if (!deviceResponse['success']) {
       throw Exception("Device not registered or no ID number associated");
@@ -71,7 +85,7 @@ class ApiService {
       try {
         final result = await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_fetchLink.php?linkID=$linkID");
-          final response = await http.get(uri);
+          final response = await httpClient.get(uri);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -110,7 +124,7 @@ class ApiService {
       try {
         final result = await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_checkIdNumber.php");
-          final response = await http.post(
+          final response = await httpClient.post(
             uri,
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({"idNumber": idNumber}),
@@ -144,7 +158,7 @@ class ApiService {
       try {
         final result = await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_fetchProfile.php?idNumber=$idNumber");
-          final response = await http.get(uri);
+          final response = await httpClient.get(uri);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -174,7 +188,7 @@ class ApiService {
       try {
         await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_updateLanguage.php");
-          final response = await http.post(
+          final response = await httpClient.post(
             uri,
             body: {
               'idNumber': idNumber,
@@ -209,7 +223,7 @@ class ApiService {
       try {
         final result = await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_checkDeviceId.php?deviceID=$deviceId");
-          final response = await http.get(uri);
+          final response = await httpClient.get(uri);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -239,7 +253,7 @@ class ApiService {
       try {
         final result = await _makeParallelRequest((apiUrl) async {
           final uri = Uri.parse("${apiUrl}V4/Others/Kurt/ArkLinkAPI/kurt_fetchManualLink.php?linkID=$linkID");
-          final response = await http.get(uri);
+          final response = await httpClient.get(uri);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -270,6 +284,18 @@ class ApiService {
     String finalError = "All API URLs are unreachable after $maxRetries attempts";
     _showToast(finalError);
     throw Exception(finalError);
+  }
+
+  static void setupHttpOverrides() {
+    HttpOverrides.global = MyHttpOverrides();
+  }
+}
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
   }
 }
 
