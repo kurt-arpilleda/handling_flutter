@@ -12,7 +12,7 @@ void main() async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   String? phOrJp = prefs.getString('phorjp');
   String? deviceId = await UniqueIdentifier.serial;
-
+  ApiService.setupHttpOverrides();
   String initialRoute = '/phorjapan'; // Default route
 
   if (phOrJp == null) {
