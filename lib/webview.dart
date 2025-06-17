@@ -15,6 +15,7 @@ import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'package:unique_identifier/unique_identifier.dart';
+import 'barcode_scanner_screen.dart';
 
 class SoftwareWebViewScreen extends StatefulWidget {
   final int linkID;
@@ -241,7 +242,6 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
         _showCountryLoginDialog(context, value);
         return;
       }
-
       // Get the appropriate service based on the selected country
       dynamic service = value == "jp" ? apiServiceJP : apiService;
 
@@ -423,6 +423,221 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
         }
       }
     });
+  }
+  Future<void> _openBarcodeScanner() async {
+    try {
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const BarcodeScannerScreen(),
+        ),
+      );
+
+      if (result != null && result is String && result.isNotEmpty) {
+        // Inject the scanned code into the focused input field
+        await _injectBarcodeIntoWebView(result);
+      }
+    } catch (e) {
+      print('Error opening barcode scanner: $e');
+      Fluttertoast.showToast(
+        msg: _currentLanguageFlag == 2
+            ? "バーコードスキャナーを開けませんでした"
+            : "Could not open barcode scanner",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+      );
+    }
+  }
+
+  Future<void> _injectBarcodeIntoWebView(String barcode) async {
+    if (webViewController != null) {
+      try {
+        String jsCode = '''
+    async function injectBarcode() {
+      const activeElement = document.activeElement;
+      const inputs = document.querySelectorAll('input[type="text"], input[type="search"], input[type="number"], textarea');
+      const targetInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') 
+        ? activeElement 
+        : inputs.length > 0 ? inputs[0] : null;
+
+      if (!targetInput) return 'no_input_found';
+
+      // Focus and set value
+      targetInput.focus();
+      targetInput.value = '$barcode';
+
+      // Trigger input event
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Trigger change event
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Create and dispatch Enter key sequence with delays
+      const enterEvent = (type) => new KeyboardEvent(type, {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      });
+
+      targetInput.dispatchEvent(enterEvent('keydown'));
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      targetInput.dispatchEvent(enterEvent('keypress'));
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      targetInput.dispatchEvent(enterEvent('keyup'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Try to submit form if exists
+      if (targetInput.form) {
+        targetInput.form.dispatchEvent(new Event('submit', { bubbles: true }));
+      }
+
+      // Blur the input field to close keyboard
+      await new Promise(resolve => setTimeout(resolve, 100));
+      targetInput.blur();
+
+      return 'success';
+    }
+
+    injectBarcode().then(result => result);
+    ''';
+
+        final result = await webViewController!.evaluateJavascript(source: jsCode);
+        print('Barcode injection result: $result');
+
+        Fluttertoast.showToast(
+          msg: _currentLanguageFlag == 2
+              ? "バーコードが入力されました: $barcode"
+              : "Barcode entered: $barcode",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
+        );
+
+      } catch (e) {
+        print('Error injecting barcode: $e');
+        Fluttertoast.showToast(
+          msg: _currentLanguageFlag == 2
+              ? "バーコードの入力に失敗しました"
+              : "Failed to enter barcode",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+      }
+    }
+  }
+
+  Future<void> _setupInputFieldDetection() async {
+    if (webViewController != null) {
+      String jsCode = '''
+(function() {
+  let button;
+  let container;
+
+  function isVisible(elem) {
+    if (!elem || elem.offsetParent === null) return false;
+    
+    const rect = elem.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const topElem = document.elementFromPoint(centerX, centerY);
+    return topElem === elem || elem.contains(topElem);
+  }
+
+  function updateBarcodeScannerButton() {
+    const input = document.getElementById('search');
+    if (!input) return;
+
+    const shouldShow = isVisible(input);
+
+    // If it should be visible and not already added
+    if (shouldShow && !input.dataset.hasBarcodeButton) {
+      input.dataset.hasBarcodeButton = 'true';
+
+      container = document.createElement('div');
+      container.style.position = 'relative';
+      container.style.display = 'inline-block';
+      container.style.width = '100%';
+
+      input.parentNode.insertBefore(container, input);
+      container.appendChild(input);
+
+      button = document.createElement('div');
+      button.innerHTML = '𝄃𝄂𝄂𝄀𝄁𝄃';
+      button.style.cssText = \`
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 9999;
+        background: #3452B4;
+        color: white;
+        padding: 0 4px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        font-family: Arial, sans-serif;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      \`;
+
+      button.onclick = function(e) {
+        e.stopPropagation();
+        window.flutter_inappwebview.callHandler('openBarcodeScanner');
+      };
+
+      container.appendChild(button);
+    }
+
+    // If the input is now hidden or behind modal, remove the button
+    if (!shouldShow && button && container && container.parentNode) {
+      input.removeAttribute('data-has-barcode-button');
+      container.parentNode.insertBefore(input, container);
+      container.remove();
+      button = null;
+      container = null;
+    }
+  }
+
+  // Initial check
+  updateBarcodeScannerButton();
+
+  // Observe DOM for changes (e.g., modal open/close)
+  const observer = new MutationObserver(function() {
+    updateBarcodeScannerButton();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style', 'class']
+  });
+
+  // Also check every second in case changes aren't caught by observer
+  setInterval(updateBarcodeScannerButton, 1000);
+})();
+''';
+
+      try {
+        await webViewController!.evaluateJavascript(source: jsCode);
+      } catch (e) {
+        print('Error setting up input field detection: \$e');
+      }
+    }
   }
   @override
   Widget build(BuildContext context) {
@@ -823,6 +1038,7 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                 InAppWebView(
                   initialUrlRequest: URLRequest(url: WebUri(_webUrl!)),
                   initialSettings: InAppWebViewSettings(
+                    // ... your existing settings
                     mediaPlaybackRequiresUserGesture: false,
                     javaScriptEnabled: true,
                     useHybridComposition: true,
@@ -854,6 +1070,14 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                   pullToRefreshController: pullToRefreshController,
                   onWebViewCreated: (controller) {
                     webViewController = controller;
+
+                    // Add handler for barcode scanner
+                    controller.addJavaScriptHandler(
+                      handlerName: 'openBarcodeScanner',
+                      callback: (args) {
+                        _openBarcodeScanner();
+                      },
+                    );
                   },
                   onLoadStart: (controller, url) {
                     setState(() {
@@ -861,18 +1085,23 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                       _progress = 0;
                     });
                   },
-                  onLoadStop: (controller, url) {
+                  onLoadStop: (controller, url) async {
                     pullToRefreshController?.endRefreshing();
                     setState(() {
                       _isLoading = false;
                       _progress = 1;
                     });
+
+                    // Setup input field detection after page loads
+                    await Future.delayed(Duration(milliseconds: 1000));
+                    await _setupInputFieldDetection();
                   },
                   onProgressChanged: (controller, progress) {
                     setState(() {
                       _progress = progress / 100;
                     });
                   },
+                  // ... rest of your existing InAppWebView configuration
                   onReceivedServerTrustAuthRequest: (controller, challenge) async {
                     return ServerTrustAuthResponse(action: ServerTrustAuthResponseAction.PROCEED);
                   },
@@ -894,7 +1123,6 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                       action: allGranted ? PermissionResponseAction.GRANT : PermissionResponseAction.DENY,
                     );
                   },
-                  // Handle download links by opening in external browser
                   shouldOverrideUrlLoading: (controller, navigationAction) async {
                     final url = navigationAction.request.url?.toString() ?? '';
 
@@ -903,11 +1131,9 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                       return NavigationActionPolicy.CANCEL;
                     }
 
-                    // Use debounced navigation for regular links
                     _debounceNavigation(url);
                     return NavigationActionPolicy.CANCEL;
                   },
-                  // Also handle explicit download requests
                   onDownloadStartRequest: (controller, downloadStartRequest) async {
                     await _launchInBrowser(downloadStartRequest.url.toString());
                   },
