@@ -34,16 +34,17 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 
   bool _screenOpened = false;
   bool _torchEnabled = false;
-  CameraFacing _cameraFacing = CameraFacing.back;
+  bool _showCenterLine = false;
   StreamSubscription<BarcodeCapture>? _subscription;
-  int _currentLanguageFlag = 1; // Default to English
-  String _phOrJp = "ph"; // Default to ph
+  int _currentLanguageFlag = 1;
+  String _phOrJp = "ph";
 
-  // Variables for threshold checking
   final int _requiredConsecutiveScans = 3;
   String? _lastScannedCode;
   int _consecutiveScanCount = 0;
   Timer? _scanResetTimer;
+  Timer? _cooldownTimer;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -69,6 +70,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   void dispose() {
     _subscription?.cancel();
     _scanResetTimer?.cancel();
+    _cooldownTimer?.cancel();
     cameraController.dispose();
     super.dispose();
   }
@@ -76,10 +78,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   void _startListening() {
     _subscription = cameraController.barcodes.listen(
           (BarcodeCapture capture) {
-        if (!_screenOpened && capture.barcodes.isNotEmpty) {
+        if (!_screenOpened && !_isProcessing && capture.barcodes.isNotEmpty) {
           final String code = capture.barcodes.first.displayValue ?? '';
-          if (code.isNotEmpty) {
-            _processScannedCode(code);
+          if (code.isNotEmpty && code.trim().length > 3) {
+            _processScannedCode(code.trim());
           }
         }
       },
@@ -96,28 +98,35 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       _consecutiveScanCount = 1;
     }
 
-    _scanResetTimer = Timer(const Duration(milliseconds: 500), () {
+    _scanResetTimer = Timer(const Duration(milliseconds: 300), () {
       _consecutiveScanCount = 0;
       _lastScannedCode = null;
     });
 
-    if (_consecutiveScanCount >= _requiredConsecutiveScans) {
+    if (_consecutiveScanCount >= _requiredConsecutiveScans && !_isProcessing) {
       _scanResetTimer?.cancel();
+      _isProcessing = true;
       _screenOpened = true;
       _foundBarcode(code);
     }
   }
 
   void _foundBarcode(String code) async {
+    setState(() {
+      _showCenterLine = true;
+    });
+
     if (await Vibration.hasVibrator() ?? false) {
-      Vibration.vibrate(duration: 200);
+      Vibration.vibrate(duration: 100);
     }
 
     SystemSound.play(SystemSoundType.click);
 
-    if (mounted) {
-      Navigator.of(context).pop(code);
-    }
+    _cooldownTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        Navigator.of(context).pop(code);
+      }
+    });
   }
 
   Future<void> _toggleTorch() async {
@@ -127,59 +136,16 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     await cameraController.toggleTorch();
   }
 
-  Future<void> _switchCamera() async {
-    setState(() {
-      _cameraFacing = _cameraFacing == CameraFacing.back
-          ? CameraFacing.front
-          : CameraFacing.back;
-    });
-    await cameraController.switchCamera();
-  }
+  String get _titleText => _currentLanguageFlag == 2 ? "スキャナー" : "Scanner";
 
-  String get _titleText => _currentLanguageFlag == 2
-      ? "バーコードスキャン"
-      : "Scan Barcode";
-
-  String get _positionBarcodeText => _currentLanguageFlag == 2
-      ? "バーコードをフレーム内に配置してスキャンしてください"
-      : "Position the barcode within the frame to scan";
-
-  String get _flashOnTooltip => _currentLanguageFlag == 2
-      ? "フラッシュオン"
-      : "Flash on";
-
-  String get _flashOffTooltip => _currentLanguageFlag == 2
-      ? "フラッシュオフ"
-      : "Flash off";
-
-  String get _frontCameraTooltip => _currentLanguageFlag == 2
-      ? "フロントカメラ"
-      : "Front camera";
-
-  String get _rearCameraTooltip => _currentLanguageFlag == 2
-      ? "リアカメラ"
-      : "Rear camera";
+  String get _instructionText => _currentLanguageFlag == 2
+      ? "バーコードまたはQRコードをフレーム内に配置してください"
+      : "Place the barcode or QR code inside the frame";
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-          tooltip: _currentLanguageFlag == 2 ? "戻る" : "Back",
-        ),
-        title: Text(
-          _titleText,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: _currentLanguageFlag == 2 ? 18.0 : 20.0,
-          ),
-        ),
-      ),
       body: Stack(
         children: [
           MobileScanner(
@@ -187,75 +153,83 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
             fit: BoxFit.cover,
           ),
           CustomScannerOverlay(
-            borderColor: Colors.red,
-            borderRadius: 10,
-            borderLength: 30,
-            borderWidth: 10,
-            cutOutSize: 300,
+            showCenterLine: _showCenterLine,
           ),
           Positioned(
-            bottom: 100,
-            left: 0,
-            right: 0,
+            top: 60,
+            right: 16,
             child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                _positionBarcodeText,
-                style: TextStyle(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(
+                  Icons.close,
                   color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  size: 32,
                 ),
-                textAlign: TextAlign.center,
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ),
           ),
-          // Positioned torch and camera switch buttons at the bottom
           Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            top: 80,
+            left: 26,
+            right: 26,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Torch button
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: Icon(
-                      _torchEnabled ? Icons.flash_on : Icons.flash_off,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.qr_code_scanner,
                       color: Colors.white,
-                      size: 32,
+                      size: 24,
                     ),
-                    onPressed: _toggleTorch,
-                    tooltip: _torchEnabled ? _flashOffTooltip : _flashOnTooltip,
-                  ),
+                    SizedBox(width: 8),
+                    Text(
+                      _titleText,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: 40),
-                // Camera switch button
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: Icon(
-                      _cameraFacing == CameraFacing.back
-                          ? Icons.camera_front
-                          : Icons.camera_rear,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                    onPressed: _switchCamera,
-                    tooltip: _cameraFacing == CameraFacing.back
-                        ? _frontCameraTooltip
-                        : _rearCameraTooltip,
+                SizedBox(height: 20),
+                Text(
+                  _instructionText,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
                   ),
                 ),
               ],
+            ),
+          ),
+          Positioned(
+            bottom: 32,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    _torchEnabled ? Icons.flash_on : Icons.flash_off,
+                    color: _torchEnabled ? Colors.yellow : Colors.white,
+                    size: 32,
+                  ),
+                  onPressed: _toggleTorch,
+                ),
+              ),
             ),
           ),
         ],
@@ -265,159 +239,123 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 }
 
 class CustomScannerOverlay extends StatelessWidget {
-  final Color borderColor;
-  final double borderWidth;
-  final double borderRadius;
-  final double borderLength;
-  final double cutOutSize;
+  final bool showCenterLine;
 
   const CustomScannerOverlay({
-    this.borderColor = Colors.red,
-    this.borderWidth = 3.0,
-    this.borderRadius = 0,
-    this.borderLength = 40,
-    this.cutOutSize = 250,
+    required this.showCenterLine,
     Key? key,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double width = constraints.maxWidth;
-        final double height = constraints.maxHeight;
-        final double borderWidthSize = width / 2;
-        final double borderOffset = borderWidth / 2;
-        final double _borderLength = borderLength > cutOutSize / 2 + borderWidth * 2
-            ? borderWidthSize / 2
-            : borderLength;
-        final double _cutOutSize = cutOutSize < width ? cutOutSize : width - borderOffset;
-
-        return Stack(
-          children: [
-            Container(
-              color: Colors.black.withOpacity(0.5),
-            ),
-            Center(
-              child: Container(
-                width: _cutOutSize,
-                height: _cutOutSize,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Colors.transparent,
-                    width: borderWidth,
-                  ),
-                  borderRadius: BorderRadius.circular(borderRadius),
-                ),
-              ),
-            ),
-            Positioned(
-              top: height / 2 - _cutOutSize / 2 - borderOffset,
-              left: width / 2 - _cutOutSize / 2 - borderOffset,
-              child: CustomPaint(
-                size: Size(_borderLength + borderWidth, _borderLength + borderWidth),
-                painter: CornerPainter(
-                  borderColor: borderColor,
-                  borderWidth: borderWidth,
-                  cornerSide: CornerSide.topLeft,
-                ),
-              ),
-            ),
-            Positioned(
-              top: height / 2 - _cutOutSize / 2 - borderOffset,
-              left: width / 2 + _cutOutSize / 2 - _borderLength - borderOffset,
-              child: CustomPaint(
-                size: Size(_borderLength + borderWidth, _borderLength + borderWidth),
-                painter: CornerPainter(
-                  borderColor: borderColor,
-                  borderWidth: borderWidth,
-                  cornerSide: CornerSide.topRight,
-                ),
-              ),
-            ),
-            Positioned(
-              top: height / 2 + _cutOutSize / 2 - _borderLength - borderOffset,
-              left: width / 2 - _cutOutSize / 2 - borderOffset,
-              child: CustomPaint(
-                size: Size(_borderLength + borderWidth, _borderLength + borderWidth),
-                painter: CornerPainter(
-                  borderColor: borderColor,
-                  borderWidth: borderWidth,
-                  cornerSide: CornerSide.bottomLeft,
-                ),
-              ),
-            ),
-            Positioned(
-              top: height / 2 + _cutOutSize / 2 - _borderLength - borderOffset,
-              left: width / 2 + _cutOutSize / 2 - _borderLength - borderOffset,
-              child: CustomPaint(
-                size: Size(_borderLength + borderWidth, _borderLength + borderWidth),
-                painter: CornerPainter(
-                  borderColor: borderColor,
-                  borderWidth: borderWidth,
-                  cornerSide: CornerSide.bottomRight,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    return CustomPaint(
+      size: Size.infinite,
+      painter: ScannerOverlayPainter(
+        showCenterLine: showCenterLine,
+      ),
     );
   }
 }
 
-enum CornerSide { topLeft, topRight, bottomLeft, bottomRight }
+class ScannerOverlayPainter extends CustomPainter {
+  final bool showCenterLine;
 
-class CornerPainter extends CustomPainter {
-  final Color borderColor;
-  final double borderWidth;
-  final CornerSide cornerSide;
-
-  CornerPainter({
-    required this.borderColor,
-    required this.borderWidth,
-    required this.cornerSide,
+  ScannerOverlayPainter({
+    required this.showCenterLine,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = borderColor
+    final double frameWidth = size.width * 0.9;
+    final double frameHeight = frameWidth * 0.8;
+    final double centerX = (size.width - frameWidth) / 2;
+    final double centerY = (size.height - frameHeight) / 2;
+
+
+    final Paint dimPaint = Paint()
+      ..color = Colors.black.withOpacity(0.8);
+
+    final Path dimPath = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addRect(Rect.fromLTWH(centerX, centerY, frameWidth, frameHeight))
+      ..fillType = PathFillType.evenOdd;
+
+    canvas.drawPath(dimPath, dimPaint);
+
+    final Paint borderPaint = Paint()
+      ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = borderWidth;
+      ..strokeWidth = 2;
 
-    final Path path = Path();
+    canvas.drawRect(
+      Rect.fromLTWH(centerX, centerY, frameWidth, frameHeight),
+      borderPaint,
+    );
 
-    switch (cornerSide) {
-      case CornerSide.topLeft:
-        path.moveTo(0, size.height);
-        path.lineTo(0, borderWidth);
-        path.quadraticBezierTo(0, 0, borderWidth, 0);
-        path.lineTo(size.width, 0);
-        break;
-      case CornerSide.topRight:
-        path.moveTo(0, 0);
-        path.lineTo(size.width - borderWidth, 0);
-        path.quadraticBezierTo(size.width, 0, size.width, borderWidth);
-        path.lineTo(size.width, size.height);
-        break;
-      case CornerSide.bottomLeft:
-        path.moveTo(0, 0);
-        path.lineTo(0, size.height - borderWidth);
-        path.quadraticBezierTo(0, size.height, borderWidth, size.height);
-        path.lineTo(size.width, size.height);
-        break;
-      case CornerSide.bottomRight:
-        path.moveTo(size.width, 0);
-        path.lineTo(size.width, size.height - borderWidth);
-        path.quadraticBezierTo(size.width, size.height, size.width - borderWidth, size.height);
-        path.lineTo(0, size.height);
-        break;
+    final double cornerLength = 30;
+    final double cornerWidth = 4;
+
+    final Paint cornerPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = cornerWidth;
+
+    canvas.drawLine(
+      Offset(centerX, centerY),
+      Offset(centerX + cornerLength, centerY),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, centerY),
+      Offset(centerX, centerY + cornerLength),
+      cornerPaint,
+    );
+
+    canvas.drawLine(
+      Offset(centerX + frameWidth, centerY),
+      Offset(centerX + frameWidth - cornerLength, centerY),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX + frameWidth, centerY),
+      Offset(centerX + frameWidth, centerY + cornerLength),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, centerY + frameHeight),
+      Offset(centerX + cornerLength, centerY + frameHeight),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, centerY + frameHeight),
+      Offset(centerX, centerY + frameHeight - cornerLength),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX + frameWidth, centerY + frameHeight),
+      Offset(centerX + frameWidth - cornerLength, centerY + frameHeight),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(centerX + frameWidth, centerY + frameHeight),
+      Offset(centerX + frameWidth, centerY + frameHeight - cornerLength),
+      cornerPaint,
+    );
+    if (showCenterLine) {
+      final Paint centerLinePaint = Paint()
+        ..color = Colors.green
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3;
+
+      final double centerLineY = centerY + frameHeight / 2;
+      canvas.drawLine(
+        Offset(centerX, centerLineY),
+        Offset(centerX + frameWidth, centerLineY),
+        centerLinePaint,
+      );
     }
-
-    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
