@@ -16,6 +16,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'package:unique_identifier/unique_identifier.dart';
 import 'barcode_scanner_screen.dart';
+import 'onBoarding.dart';
 
 class SoftwareWebViewScreen extends StatefulWidget {
   final int linkID;
@@ -50,7 +51,9 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
   bool _isCountryLoadingPh = false;
   bool _isCountryLoadingJp = false;
   bool _isDownloadDialogShowing = false;
-
+  //onBoarding Start
+  OnBoardingManager? _onboardingManager;
+  //onBoarding End
   @override
   void initState() {
     super.initState();
@@ -60,13 +63,52 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
     _fetchInitialData();
     _checkForUpdates();
   }
+  //onBoarding Start
+  void _setupOnboarding() {
+    final onboardingSteps = [
+      OnBoardingStep(
+        selector: '.w-100.text-center h6',
+        explanation: 'This is where the location shows that you need to pick up',
+        order: 1,
+      ),
+      OnBoardingStep(
+        selector: '.w3-border.w3-padding.w3-large.w3-round.w3-blue.text-center',
+        explanation: 'This is where the Section Name is showing',
+        order: 2,
+      ),
+      OnBoardingStep(
+        selector: '.w3-container.w3-blue h1',
+        explanation: 'This is where the Rack location is showing',
+        order: 3,
+      ),
+      OnBoardingStep(
+        selector: '#pindot',
+        explanation: 'Click this to proceed with handling the current item in this section',
+        order: 4,
+      ),
+    ];
 
+    _onboardingManager = OnBoardingManager(
+      webViewController: webViewController,
+      steps: onboardingSteps,
+      onboardingId: 'webview_tutorial_v1',
+      onCompleted: () {
+        print('Onboarding completed');
+      },
+    );
+
+    _onboardingManager?.startOnboarding();
+  }
+  //onBoarding End
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     webViewController?.stopLoading();
     pullToRefreshController?.dispose();
     _debounceTimer?.cancel();
+    //onBoarding Start
+    _onboardingManager?.dispose();
+    //onBoarding End
     super.dispose();
   }
 
@@ -1371,6 +1413,14 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                         _openBarcodeScanner();
                       },
                     );
+                    //onBoarding Start
+                    controller.addJavaScriptHandler(
+                      handlerName: 'nextOnboardingStep',
+                      callback: (args) {
+                        _onboardingManager?.nextStep();
+                      },
+                    );
+                    //onBoarding End
                   },
                   onLoadStart: (controller, url) {
                     setState(() {
@@ -1436,6 +1486,10 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                     // Setup input field detection after page loads
                     await Future.delayed(Duration(milliseconds: 1000));
                     await _setupInputFieldDetection();
+                    //onBoarding Start
+                    await Future.delayed(Duration(milliseconds: 2000));
+                    _setupOnboarding();
+                    //onBoarding Start
                   },
                   onProgressChanged: (controller, progress) {
                     setState(() {
