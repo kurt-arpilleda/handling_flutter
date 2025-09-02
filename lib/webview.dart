@@ -1487,7 +1487,7 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                     await Future.delayed(Duration(milliseconds: 1000));
                     await _setupInputFieldDetection();
                     //onBoarding Start
-                    await Future.delayed(Duration(milliseconds: 2000));
+                    await Future.delayed(Duration(milliseconds: 1200));
                     _setupOnboarding();
                     //onBoarding Start
                   },
