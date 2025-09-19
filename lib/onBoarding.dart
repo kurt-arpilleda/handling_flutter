@@ -343,7 +343,55 @@ class OnBoardingManager {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_onboardingKey$onboardingId');
   }
-
+  static List<OnBoardingStep> getDefaultOnboardingSteps() {
+    return [
+      OnBoardingStep(
+        selector: '.w-100.text-center h6',
+        explanation: 'This is where the location shows that you need to pick up',
+        order: 1,
+      ),
+      OnBoardingStep(
+        selector: '.w3-border.w3-padding.w3-large.w3-round.w3-blue.text-center',
+        explanation: 'This is where the Section Name is showing',
+        order: 2,
+      ),
+      OnBoardingStep(
+        selector: '#pindot',
+        explanation: 'Click this to proceed with handling the current item in this section',
+        order: 3,
+      ),
+      OnBoardingStep(
+        selector: '.swal2-content .w3-border.w3-padding.w3-xxxlarge.w3-round.w3-blue',
+        explanation: 'It will show again the section of where to get the item',
+        order: 4,
+      ),
+      OnBoardingStep(
+        selector: '.swal2-confirm.w3-btn.w3-indigo.w3-xlarge',
+        explanation: 'Click the Ok button for proceeding',
+        order: 5,
+      ),
+      OnBoardingStep(
+        selector: 'label:has(.w3-text-pink)',
+        explanation: 'It will show here the Priority Tag and it can be click to see the drawing of it',
+        order: 6,
+      ),
+      OnBoardingStep(
+        selector: 'label:has(.w3-text-blue)',
+        explanation: 'It will show the current location of that Priority',
+        order: 7,
+      ),
+      OnBoardingStep(
+        selector: '#productionTag',
+        explanation: 'This is where you input or scan the item',
+        order: 8,
+      ),
+      OnBoardingStep(
+        selector: '.border.p-3.bg-white.rounded.shadow',
+        explanation: 'It will show here the list of tag you scan or inputted',
+        order: 9,
+      ),
+    ];
+  }
   void dispose() {
     _checkTimer?.cancel();
   }
