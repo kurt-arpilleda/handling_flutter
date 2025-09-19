@@ -1397,6 +1397,12 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
                         _onboardingManager?.nextStep();
                       },
                     );
+                    controller.addJavaScriptHandler(
+                      handlerName: 'prevOnboardingStep',
+                      callback: (args) {
+                        _onboardingManager?.prevStep();
+                      },
+                    );
                     //onBoarding End
                   },
                   onLoadStart: (controller, url) {

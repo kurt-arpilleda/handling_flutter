@@ -8,11 +8,13 @@ class OnBoardingStep {
   final String selector;
   final String explanation;
   final int order;
+  final String? clickAction;
 
   OnBoardingStep({
     required this.selector,
     required this.explanation,
     required this.order,
+    this.clickAction,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class OnBoardingStep {
       'selector': selector,
       'explanation': explanation,
       'order': order,
+      'clickAction': clickAction,
     };
   }
 }
@@ -69,12 +72,44 @@ class OnBoardingManager {
 
   Future<void> _injectOnboardingCSS() async {
     const String css = '''
+.onboarding-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  z-index: 9998 !important;
+  pointer-events: auto !important;
+}
+
 .onboarding-highlight {
-  border: 3px solid #ff4444 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 0 0 4px rgba(255, 68, 68, 0.3) !important;
   position: relative !important;
   z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+.onboarding-highlight::before {
+  content: '' !important;
+  position: absolute !important;
+  top: -8px !important;
+  left: -8px !important;
+  right: -8px !important;
+  bottom: -8px !important;
+  border: 2px solid rgba(255, 255, 255, 0.8) !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  z-index: 10001 !important;
+  pointer-events: none !important;
+}
+
+.onboarding-cutout {
+  position: absolute !important;
+  background: transparent !important;
+  z-index: 10000 !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7) !important;
+  border-radius: 12px !important;
 }
 
 .onboarding-tooltip {
@@ -88,9 +123,10 @@ class OnBoardingManager {
   font-size: 14px !important;
   line-height: 1.5 !important;
   max-width: 280px !important;
-  z-index: 10000 !important;
+  z-index: 10002 !important;
   animation: fadeInUp 0.3s ease-out !important;
   backdrop-filter: blur(10px) !important;
+  pointer-events: auto !important;
 }
 
 .onboarding-tooltip::before {
@@ -130,9 +166,17 @@ class OnBoardingManager {
 .onboarding-text {
   margin-left: 32px !important;
   margin-top: 2px !important;
+  margin-bottom: 12px !important;
 }
 
-.onboarding-next-btn {
+.onboarding-buttons {
+  display: flex !important;
+  justify-content: space-between !important;
+  margin-top: 12px !important;
+  width: 100% !important;
+}
+
+.onboarding-prev-btn, .onboarding-next-btn {
   background: rgba(255, 255, 255, 0.2) !important;
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   color: white !important;
@@ -140,22 +184,32 @@ class OnBoardingManager {
   border-radius: 6px !important;
   font-size: 12px !important;
   cursor: pointer !important;
-  margin-top: 12px !important;
-  float: right !important;
   transition: all 0.2s ease !important;
+  min-width: 60px !important;
+  text-align: center !important;
 }
 
-.onboarding-next-btn:hover {
+.onboarding-prev-btn:hover, .onboarding-next-btn:hover {
   background: rgba(255, 255, 255, 0.3) !important;
   transform: translateY(-1px) !important;
+}
+
+.onboarding-prev-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
 }
 
 .swal2-container .onboarding-highlight {
   z-index: 10001 !important;
 }
 
+.swal2-container .onboarding-cutout {
+  z-index: 10000 !important;
+}
+
 .swal2-container .onboarding-tooltip {
-  z-index: 10002 !important;
+  z-index: 10003 !important;
 }
 
 @keyframes fadeInUp {
@@ -202,7 +256,6 @@ class OnBoardingManager {
           await _highlightElement(step);
         }
       } catch (e) {
-        // Continue checking
       }
     });
   }
@@ -210,6 +263,7 @@ class OnBoardingManager {
   Future<void> _highlightElement(OnBoardingStep step) async {
     final jsCode = '''
   (function() {
+    document.querySelectorAll('.onboarding-cutout').forEach(el => el.remove());
     document.querySelectorAll('.onboarding-highlight').forEach(el => {
       el.classList.remove('onboarding-highlight');
     });
@@ -231,20 +285,34 @@ class OnBoardingManager {
     
     element.classList.add('onboarding-highlight');
     
+    const rect = element.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
+    const cutout = document.createElement('div');
+    cutout.className = 'onboarding-cutout';
+    cutout.style.position = 'absolute';
+    cutout.style.top = (rect.top + scrollTop - 8) + 'px';
+    cutout.style.left = (rect.left + scrollLeft - 8) + 'px';
+    cutout.style.width = (rect.width + 16) + 'px';
+    cutout.style.height = (rect.height + 16) + 'px';
+    
+    document.body.appendChild(cutout);
+    
     const tooltip = document.createElement('div');
     tooltip.className = 'onboarding-tooltip';
     tooltip.innerHTML = `
       <div class="onboarding-step-number">${step.order}</div>
       <div class="onboarding-text">${step.explanation}</div>
-      <button class="onboarding-next-btn" id="onboarding-next-${step.order}">
-        Next
-      </button>
-      <div style="clear: both;"></div>
+      <div class="onboarding-buttons">
+        <button class="onboarding-prev-btn" id="onboarding-prev-${step.order}" ${_currentStep == 0 ? 'disabled' : ''}>
+          Prev
+        </button>
+        <button class="onboarding-next-btn" id="onboarding-next-${step.order}">
+          Next
+        </button>
+      </div>
     `;
-    
-    const rect = element.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
     
     tooltip.style.position = 'absolute';
     tooltip.style.top = (rect.bottom + scrollTop + 12) + 'px';
@@ -252,15 +320,25 @@ class OnBoardingManager {
     
     document.body.appendChild(tooltip);
     
-    // Add click handler immediately after adding to DOM
+    const prevBtn = document.getElementById('onboarding-prev-${step.order}');
     const nextBtn = document.getElementById('onboarding-next-${step.order}');
+    
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.flutter_inappwebview.callHandler('prevOnboardingStep');
+      });
+    }
+    
     if (nextBtn) {
       nextBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        window.flutter_inappwebview.callHandler('nextOnboardingStep');
+        ${step.clickAction != null ? step.clickAction! : 'window.flutter_inappwebview.callHandler(\'nextOnboardingStep\');'}
       });
     }
+    
     const tooltipRect = tooltip.getBoundingClientRect();
     
     if (tooltipRect.right > window.innerWidth) {
@@ -286,18 +364,24 @@ class OnBoardingManager {
   }
 
   Future<void> nextStep() async {
-    if (_isProcessing) return; // Prevent multiple rapid clicks
+    if (_isProcessing) return;
 
     _isProcessing = true;
-
-    // Immediately remove current highlights and tooltips
     await _clearCurrentHighlights();
     _currentStep++;
-
-    // Add delay to allow page transitions
     await Future.delayed(Duration(milliseconds: 200));
     await _showCurrentStep();
+    _isProcessing = false;
+  }
 
+  Future<void> prevStep() async {
+    if (_isProcessing || _currentStep <= 0) return;
+
+    _isProcessing = true;
+    await _clearCurrentHighlights();
+    _currentStep--;
+    await Future.delayed(Duration(milliseconds: 200));
+    await _showCurrentStep();
     _isProcessing = false;
   }
 
@@ -306,6 +390,7 @@ class OnBoardingManager {
 
     try {
       await webViewController!.evaluateJavascript(source: '''
+        document.querySelectorAll('.onboarding-cutout').forEach(el => el.remove());
         document.querySelectorAll('.onboarding-highlight').forEach(el => {
           el.classList.remove('onboarding-highlight');
         });
@@ -314,7 +399,6 @@ class OnBoardingManager {
         });
       ''');
     } catch (e) {
-      // Ignore errors
     }
   }
 
@@ -323,6 +407,7 @@ class OnBoardingManager {
     _checkTimer?.cancel();
 
     await webViewController!.evaluateJavascript(source: '''
+    document.querySelectorAll('.onboarding-cutout').forEach(el => el.remove());
     document.querySelectorAll('.onboarding-highlight').forEach(el => {
       el.classList.remove('onboarding-highlight');
     });
@@ -343,6 +428,7 @@ class OnBoardingManager {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_onboardingKey$onboardingId');
   }
+
   static List<OnBoardingStep> getDefaultOnboardingSteps() {
     return [
       OnBoardingStep(
@@ -359,6 +445,7 @@ class OnBoardingManager {
         selector: '#pindot',
         explanation: 'Click this to proceed with handling the current item in this section',
         order: 3,
+        clickAction: "document.querySelector('#pindot').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
       ),
       OnBoardingStep(
         selector: '.swal2-content .w3-border.w3-padding.w3-xxxlarge.w3-round.w3-blue',
@@ -369,6 +456,7 @@ class OnBoardingManager {
         selector: '.swal2-confirm.w3-btn.w3-indigo.w3-xlarge',
         explanation: 'Click the Ok button for proceeding',
         order: 5,
+        clickAction: "document.querySelector('.swal2-confirm.w3-btn.w3-indigo.w3-xlarge').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
       ),
       OnBoardingStep(
         selector: 'label:has(.w3-text-pink)',
@@ -392,6 +480,7 @@ class OnBoardingManager {
       ),
     ];
   }
+
   void dispose() {
     _checkTimer?.cancel();
   }
