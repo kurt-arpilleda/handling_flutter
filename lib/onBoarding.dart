@@ -451,32 +451,12 @@ class OnBoardingManager {
         selector: '.swal2-content .w3-border.w3-padding.w3-xxxlarge.w3-round.w3-blue',
         explanation: 'It will show again the section of where to get the item',
         order: 4,
-      ),
-      OnBoardingStep(
-        selector: '.swal2-confirm.w3-btn.w3-indigo.w3-xlarge',
-        explanation: 'Click the Ok button for proceeding',
-        order: 5,
         clickAction: "document.querySelector('.swal2-confirm.w3-btn.w3-indigo.w3-xlarge').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
       ),
       OnBoardingStep(
         selector: 'label:has(.w3-text-pink)',
         explanation: 'It will show here the Priority Tag and it can be click to see the drawing of it',
-        order: 6,
-      ),
-      OnBoardingStep(
-        selector: 'label:has(.w3-text-blue)',
-        explanation: 'It will show the current location of that Priority',
-        order: 7,
-      ),
-      OnBoardingStep(
-        selector: '#productionTag',
-        explanation: 'This is where you input or scan the item',
-        order: 8,
-      ),
-      OnBoardingStep(
-        selector: '.border.p-3.bg-white.rounded.shadow',
-        explanation: 'It will show here the list of tag you scan or inputted',
-        order: 9,
+        order: 5,
       ),
     ];
   }
