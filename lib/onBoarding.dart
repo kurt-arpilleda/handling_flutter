@@ -79,7 +79,7 @@ class OnBoardingManager {
   left: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  background: rgba(0, 0, 0, 0.7) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
   z-index: 9998 !important;
   pointer-events: auto !important;
 }
@@ -120,7 +120,7 @@ class OnBoardingManager {
   background: transparent !important;
   z-index: 10000 !important;
   pointer-events: none !important;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4) !important;
   border-radius: 12px !important;
 }
 
