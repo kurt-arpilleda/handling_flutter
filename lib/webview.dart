@@ -69,6 +69,7 @@ class _SoftwareWebViewScreenState extends State<SoftwareWebViewScreen> with Widg
       webViewController: webViewController,
       steps: OnBoardingManager.getDefaultOnboardingSteps(),
       onboardingId: 'webview_tutorial_v2',
+      languageFlag: _currentLanguageFlag ?? 1, // Add this line
       onCompleted: () {
         print('Onboarding completed');
       },

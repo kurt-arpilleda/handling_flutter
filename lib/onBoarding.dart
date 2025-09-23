@@ -6,21 +6,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class OnBoardingStep {
   final String selector;
-  final String explanation;
+  final String explanationEn;
+  final String explanationJp;
   final int order;
   final String? clickAction;
 
   OnBoardingStep({
     required this.selector,
-    required this.explanation,
+    required this.explanationEn,
+    required this.explanationJp,
     required this.order,
     this.clickAction,
   });
 
+  String getExplanation(int languageFlag) {
+    return languageFlag == 2 ? explanationJp : explanationEn;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'selector': selector,
-      'explanation': explanation,
+      'explanationEn': explanationEn,
+      'explanationJp': explanationJp,
       'order': order,
       'clickAction': clickAction,
     };
@@ -34,6 +41,7 @@ class OnBoardingManager {
   final List<OnBoardingStep> steps;
   final String onboardingId;
   final VoidCallback? onCompleted;
+  final int languageFlag;
 
   int _currentStep = 0;
   bool _isActive = false;
@@ -44,6 +52,7 @@ class OnBoardingManager {
     required this.webViewController,
     required this.steps,
     required this.onboardingId,
+    required this.languageFlag,
     this.onCompleted,
   });
 
@@ -341,13 +350,13 @@ class OnBoardingManager {
     tooltip.className = 'onboarding-tooltip';
     tooltip.innerHTML = `
       <div class="onboarding-step-number">${step.order}</div>
-      <div class="onboarding-text">${step.explanation}</div>
+      <div class="onboarding-text">${step.getExplanation(languageFlag)}</div>
       <div class="onboarding-buttons">
         <button class="onboarding-prev-btn" id="onboarding-prev-${step.order}" ${_currentStep == 0 ? 'disabled' : ''}>
-          Prev
+          ${languageFlag == 2 ? '前' : 'Prev'}
         </button>
         <button class="onboarding-next-btn" id="onboarding-next-${step.order}">
-          Next
+          ${languageFlag == 2 ? '次' : 'Next'}
         </button>
       </div>
     `;
@@ -486,30 +495,29 @@ class OnBoardingManager {
     return [
       OnBoardingStep(
         selector: '.w-100.text-center h6',
-        explanation: 'This is where the location shows that you need to pick up',
+        explanationEn: 'This is where the location shows that you need to pick up',
+        explanationJp: 'ピックアップする必要のある場所がここに表示されます',
         order: 1,
       ),
       OnBoardingStep(
         selector: '.w3-border.w3-padding.w3-large.w3-round.w3-blue.text-center',
-        explanation: 'This is where the Section Name is showing',
+        explanationEn: 'This is where the Section Name is showing',
+        explanationJp: 'セクション名がここに表示されます',
         order: 2,
       ),
       OnBoardingStep(
         selector: '#pindot',
-        explanation: 'Click this to proceed with handling the current item in this section',
+        explanationEn: 'Click this to proceed with handling the current item in this section',
+        explanationJp: 'このセクションの現在のアイテムを処理するには、これをクリックしてください',
         order: 3,
         clickAction: "document.querySelector('#pindot').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
       ),
       OnBoardingStep(
         selector: '.swal2-content .w3-border.w3-padding.w3-xxxlarge.w3-round.w3-blue',
-        explanation: 'It will show again the section of where to get the item',
+        explanationEn: 'It will show again the section of where to get the item',
+        explanationJp: 'アイテムを取得する場所のセクションが再び表示されます',
         order: 4,
         clickAction: "document.querySelector('.swal2-confirm.w3-btn.w3-indigo.w3-xlarge').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
-      ),
-      OnBoardingStep(
-        selector: 'label:has(.w3-text-pink)',
-        explanation: 'It will show here the Priority Tag and it can be click to see the drawing of it',
-        order: 5,
       ),
     ];
   }
