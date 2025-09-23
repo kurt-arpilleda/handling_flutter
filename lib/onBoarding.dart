@@ -67,6 +67,7 @@ class OnBoardingManager {
     _currentStep = 0;
 
     await _injectOnboardingCSS();
+    await _createBlockingOverlay();
     await _showCurrentStep();
   }
 
@@ -80,6 +81,17 @@ class OnBoardingManager {
   height: 100vh !important;
   background: rgba(0, 0, 0, 0.7) !important;
   z-index: 9998 !important;
+  pointer-events: auto !important;
+}
+
+.onboarding-blocking-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: transparent !important;
+  z-index: 9997 !important;
   pointer-events: auto !important;
 }
 
@@ -231,6 +243,32 @@ class OnBoardingManager {
       document.head.appendChild(style);
     }
   ''');
+  }
+
+  Future<void> _createBlockingOverlay() async {
+    await webViewController!.evaluateJavascript(source: '''
+      if (!document.getElementById('onboarding-blocking-overlay')) {
+        const blockingOverlay = document.createElement('div');
+        blockingOverlay.id = 'onboarding-blocking-overlay';
+        blockingOverlay.className = 'onboarding-blocking-overlay';
+        blockingOverlay.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, true);
+        blockingOverlay.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, true);
+        blockingOverlay.addEventListener('touchend', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, true);
+        document.body.appendChild(blockingOverlay);
+      }
+    ''');
   }
 
   Future<void> _showCurrentStep() async {
@@ -402,6 +440,20 @@ class OnBoardingManager {
     }
   }
 
+  Future<void> _removeBlockingOverlay() async {
+    if (webViewController == null) return;
+
+    try {
+      await webViewController!.evaluateJavascript(source: '''
+        const blockingOverlay = document.getElementById('onboarding-blocking-overlay');
+        if (blockingOverlay) {
+          blockingOverlay.remove();
+        }
+      ''');
+    } catch (e) {
+    }
+  }
+
   Future<void> _completeOnboarding() async {
     _isActive = false;
     _checkTimer?.cancel();
@@ -416,6 +468,7 @@ class OnBoardingManager {
     });
   ''');
 
+    await _removeBlockingOverlay();
     await _setOnboardingCompleted();
     onCompleted?.call();
   }
