@@ -491,16 +491,17 @@ class OnBoardingManager {
     await prefs.remove('$_onboardingKey$onboardingId');
   }
 
+  // Replace the getDefaultOnboardingSteps method with this updated version
   static List<OnBoardingStep> getDefaultOnboardingSteps() {
     return [
       OnBoardingStep(
-        selector: '.w-100.text-center h6',
+        selector: '#pickupItems',
         explanationEn: 'This is where the location shows that you need to pick up',
         explanationJp: 'ピックアップする必要のある場所がここに表示されます',
         order: 1,
       ),
       OnBoardingStep(
-        selector: '.w3-border.w3-padding.w3-large.w3-round.w3-blue.text-center',
+        selector: '#sectionNameText',
         explanationEn: 'This is where the Section Name is showing',
         explanationJp: 'セクション名がここに表示されます',
         order: 2,
@@ -511,13 +512,6 @@ class OnBoardingManager {
         explanationJp: 'このセクションの現在のアイテムを処理するには、これをクリックしてください',
         order: 3,
         clickAction: "document.querySelector('#pindot').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
-      ),
-      OnBoardingStep(
-        selector: '.swal2-content .w3-border.w3-padding.w3-xxxlarge.w3-round.w3-blue',
-        explanationEn: 'It will show again the section of where to get the item',
-        explanationJp: 'アイテムを取得する場所のセクションが再び表示されます',
-        order: 4,
-        clickAction: "document.querySelector('.swal2-confirm.w3-btn.w3-indigo.w3-xlarge').click(); window.flutter_inappwebview.callHandler('nextOnboardingStep');",
       ),
     ];
   }
