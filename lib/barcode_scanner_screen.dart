@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -13,8 +12,27 @@ class BarcodeScannerScreen extends StatefulWidget {
   State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
 }
 
-class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with WidgetsBindingObserver {
-  late MobileScannerController cameraController;
+class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
+  final MobileScannerController cameraController = MobileScannerController(
+    torchEnabled: false,
+    detectionSpeed: DetectionSpeed.unrestricted,
+    facing: CameraFacing.back,
+    formats: [
+      BarcodeFormat.code128,
+      BarcodeFormat.code39,
+      BarcodeFormat.code93,
+      BarcodeFormat.ean8,
+      BarcodeFormat.ean13,
+      BarcodeFormat.upcA,
+      BarcodeFormat.upcE,
+      BarcodeFormat.itf,
+      BarcodeFormat.codabar,
+      BarcodeFormat.qrCode,
+      BarcodeFormat.pdf417,
+      BarcodeFormat.aztec,
+      BarcodeFormat.dataMatrix,
+    ],
+  );
 
   bool _screenOpened = false;
   bool _torchEnabled = false;
@@ -23,9 +41,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
   int _currentLanguageFlag = 1;
   String _phOrJp = "ph";
 
-  final int _minScansRequired = 2;
-  final int _maxScanHistory = 5;
-  final Queue<String> _scanHistory = Queue<String>();
+  final int _requiredConsecutiveScans = 3;
   final Map<String, int> _scanCounts = {};
   Timer? _scanResetTimer;
   Timer? _cooldownTimer;
@@ -34,47 +50,13 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _lockOrientation();
-    _initializeCamera();
-    _loadPreferences();
-  }
-
-  void _lockOrientation() {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
     ]);
-  }
-
-  void _initializeCamera() {
-    cameraController = MobileScannerController(
-      torchEnabled: false,
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      facing: CameraFacing.back,
-      formats: [
-        BarcodeFormat.code128,
-        BarcodeFormat.code39,
-        BarcodeFormat.code93,
-        BarcodeFormat.ean8,
-        BarcodeFormat.ean13,
-        BarcodeFormat.upcA,
-        BarcodeFormat.upcE,
-        BarcodeFormat.itf,
-        BarcodeFormat.codabar,
-        BarcodeFormat.qrCode,
-        BarcodeFormat.pdf417,
-        BarcodeFormat.aztec,
-        BarcodeFormat.dataMatrix,
-      ],
-    );
+    _loadPreferences();
     _startListening();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _lockOrientation();
-    }
+    _torchEnabled = cameraController.torchEnabled;
   }
 
   Future<void> _loadPreferences() async {
@@ -91,7 +73,6 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -110,15 +91,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
           (BarcodeCapture capture) {
         if (!_screenOpened && !_isProcessing && capture.barcodes.isNotEmpty) {
           for (final barcode in capture.barcodes) {
-            final String? rawValue = barcode.rawValue;
-            final String? displayValue = barcode.displayValue;
-            String code = rawValue ?? displayValue ?? '';
-            code = code.trim();
-            if (code.isNotEmpty && code.length >= 1) {
-              if (_isValidBarcode(code, barcode.format)) {
-                _processScannedCode(code);
-                break;
-              }
+            final String code = barcode.displayValue ?? '';
+            if (code.isNotEmpty && code.trim().isNotEmpty) {
+              _processScannedCode(code.trim());
+              break;
             }
           }
         }
@@ -126,100 +102,20 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
     );
   }
 
-  bool _isValidBarcode(String code, BarcodeFormat? format) {
-    if (code.isEmpty) return false;
-
-    if (format == BarcodeFormat.ean13 && code.length == 13) {
-      return _validateEAN13(code);
-    } else if (format == BarcodeFormat.ean8 && code.length == 8) {
-      return _validateEAN8(code);
-    } else if (format == BarcodeFormat.upcA && code.length == 12) {
-      return _validateUPCA(code);
-    } else if (format == BarcodeFormat.upcE && (code.length == 6 || code.length == 7 || code.length == 8)) {
-      return true;
-    }
-
-    return true;
-  }
-
-  bool _validateEAN13(String code) {
-    if (code.length != 13) return false;
-    try {
-      int sum = 0;
-      for (int i = 0; i < 12; i++) {
-        int digit = int.parse(code[i]);
-        sum += (i % 2 == 0) ? digit : digit * 3;
-      }
-      int checkDigit = (10 - (sum % 10)) % 10;
-      return checkDigit == int.parse(code[12]);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  bool _validateEAN8(String code) {
-    if (code.length != 8) return false;
-    try {
-      int sum = 0;
-      for (int i = 0; i < 7; i++) {
-        int digit = int.parse(code[i]);
-        sum += (i % 2 == 0) ? digit * 3 : digit;
-      }
-      int checkDigit = (10 - (sum % 10)) % 10;
-      return checkDigit == int.parse(code[7]);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  bool _validateUPCA(String code) {
-    if (code.length != 12) return false;
-    try {
-      int sum = 0;
-      for (int i = 0; i < 11; i++) {
-        int digit = int.parse(code[i]);
-        sum += (i % 2 == 0) ? digit * 3 : digit;
-      }
-      int checkDigit = (10 - (sum % 10)) % 10;
-      return checkDigit == int.parse(code[11]);
-    } catch (e) {
-      return false;
-    }
-  }
-
   void _processScannedCode(String code) {
     _scanResetTimer?.cancel();
 
-    _scanHistory.addLast(code);
     _scanCounts[code] = (_scanCounts[code] ?? 0) + 1;
 
-    while (_scanHistory.length > _maxScanHistory) {
-      final removed = _scanHistory.removeFirst();
-      _scanCounts[removed] = (_scanCounts[removed] ?? 1) - 1;
-      if (_scanCounts[removed]! <= 0) {
-        _scanCounts.remove(removed);
-      }
-    }
-
-    _scanResetTimer = Timer(const Duration(milliseconds: 800), () {
-      _scanHistory.clear();
+    _scanResetTimer = Timer(const Duration(milliseconds: 500), () {
       _scanCounts.clear();
     });
 
-    String? bestCode;
-    int maxCount = 0;
-    _scanCounts.forEach((key, value) {
-      if (value > maxCount) {
-        maxCount = value;
-        bestCode = key;
-      }
-    });
-
-    if (bestCode != null && maxCount >= _minScansRequired && !_isProcessing) {
+    if (_scanCounts[code]! >= _requiredConsecutiveScans && !_isProcessing) {
       _scanResetTimer?.cancel();
       _isProcessing = true;
       _screenOpened = true;
-      _foundBarcode(bestCode!);
+      _foundBarcode(code);
     }
   }
 
@@ -228,14 +124,13 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with Widget
       _showCenterLine = true;
     });
 
-    final hasVibrator = await Vibration.hasVibrator();
-    if (hasVibrator == true) {
+    if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(duration: 100);
     }
 
     SystemSound.play(SystemSoundType.click);
 
-    _cooldownTimer = Timer(const Duration(milliseconds: 100), () {
+    _cooldownTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted) {
         Navigator.of(context).pop(code);
       }
